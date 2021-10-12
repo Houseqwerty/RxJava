@@ -3,12 +3,13 @@ package com.example.rxjava
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
-import com.example.rxjava.databinding.ActivityMainBinding
 import io.reactivex.*
 import io.reactivex.Observable
 import io.reactivex.Observer
 import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposable
+import io.reactivex.observables.ConnectableObservable
 import io.reactivex.processors.PublishProcessor
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.AsyncSubject
@@ -27,7 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-//        completable()
+        completable()
 //        single()
 //        maybe()
 //        observable()
@@ -40,23 +41,98 @@ class MainActivity : AppCompatActivity() {
 //        publishSubject()
 //        replaySubject()
 //        behaviorSubject()
-        assyncSubject()
+//        assyncSubject()
     }
 
     fun completable() {
+        val observer1 = object : CompletableObserver {
+
+            override fun onSubscribe(d: Disposable) {
+                Log.d(TAG, "Completable1: onSubscribe")
+                compositeDisposable.add(d)
+            }
+
+            override fun onComplete() {
+                Log.d(TAG, "Completable1: onComplete")
+            }
+
+            override fun onError(e: Throwable) {
+                Log.d(TAG, "Completable1: onError")
+            }
+
+        }
+        val observer2 = object : CompletableObserver {
+
+            override fun onSubscribe(d: Disposable) {
+                Log.d(TAG, "Completable2: onSubscribe")
+                compositeDisposable.add(d)
+            }
+
+            override fun onComplete() {
+                Log.d(TAG, "Completable2: onComplete")
+            }
+
+            override fun onError(e: Throwable) {
+                Log.d(TAG, "Completable2: onError")
+            }
+
+        }
+        val observable = Completable.fromCallable { server() }
+
+        val disposable1 = observable.subscribe(
+            {
+                Log.d(TAG, "Completable: onComplete")
+            },
+            {
+                Log.d(TAG, "Completable: ${it.message}")
+            }
+        )
+
+        observable.subscribe()
+
+//        observable.subscribe(observer1)
+//        observable.subscribe(observer2)
+/*
         Completable.fromCallable {
             return@fromCallable Log.d(TAG, "Completable: do work")
         }
-            .subscribe {
+            .subscribe()*/
+    }
 
-            }
+    private var disposable: Disposable? = null
+    private var compositeDisposable: CompositeDisposable = CompositeDisposable()
+    override fun onDestroy() {
+        super.onDestroy()
+        disposable?.dispose()
+        compositeDisposable.dispose()
     }
 
     fun single() {
-        val disposable = Single.just("")
-            .subscribe { item, throwable: Throwable? ->
-                println()
+        val singleObserver = object : SingleObserver<String> {
+            override fun onSubscribe(d: Disposable) {
+                Log.d(TAG, "Single: onSubscribe")
             }
+
+            override fun onSuccess(item: String) {
+                Log.d(TAG, "Single: onSuccess $item")
+            }
+
+            override fun onError(e: Throwable) {
+                Log.d(TAG, "Single: onError ${e.message}")
+            }
+
+        }
+        /*Single.fromCallable { server() }
+            .subscribe(singleObserver)*/
+//        val singleObservable = Single.fromCallable { server() }
+        val singleObservable = Single.fromCallable { serverNull() }
+
+//        singleObservable.subscribe(singleObserver)
+        val disposable: Disposable = singleObservable.subscribe()
+    }
+
+    fun serverNull(): String? {
+        return null
     }
 
     @kotlin.jvm.Throws(IOException::class)
@@ -74,78 +150,80 @@ class MainActivity : AppCompatActivity() {
 
 
     fun maybe() {
-        val disposable = Maybe.fromCallable {
-            val result = Log.d(TAG, "Я выполняюсь").toString()
-            return@fromCallable result
+        val maybeObservable = Maybe.fromCallable<String> { server() }
+
+        val maybeObserver = object : MaybeObserver<String> {
+            override fun onSubscribe(d: Disposable) {
+                Log.d(TAG, "Maybe: onSubscribe")
+            }
+
+            override fun onSuccess(t: String) {
+                Log.d(TAG, "Maybe: $t")
+            }
+
+            override fun onError(e: Throwable) {
+                Log.d(TAG, "Maybe: ${e.message}")
+            }
+
+            override fun onComplete() {
+                Log.d(TAG, "Maybe: onComplete")
+            }
+
         }
-            .subscribe(object : MaybeObserver<String> {
-                override fun onSubscribe(d: Disposable) {
-                    Log.d(TAG, "Maybe: onSubscribe")
-                }
-
-                override fun onSuccess(t: String) {
-                    Log.d(TAG, "Maybe: $t")
-                }
-
-                override fun onError(e: Throwable) {
-                    Log.d(TAG, "Maybe: ${e.localizedMessage}")
-                }
-
-                override fun onComplete() {
-                    Log.d(TAG, "Maybe: onComplete")
-                }
-
-            })
+        maybeObservable.subscribe()
+        val disposable = maybeObservable.subscribe(maybeObserver)
     }
 
     fun observable() {
-        /*Observable.create<String> { emitter: ObservableEmitter<String> ->
+        val observable = Observable.create<String> { emitter: ObservableEmitter<String> ->
             emitter.onNext("шиммеры")
-            Thread.sleep(3000)
-            emitter.onNext("Новый список")
+            emitter.onNext(server())
             emitter.onComplete()
+            emitter.onNext("Ещё данные")
         }
-            .subscribe(object : Observer<String> {
-                    override fun onSubscribe(d: Disposable) {
-                        Log.d(TAG, "Observable: onSubscribe")
-                    }
 
-                    override fun onNext(t: String) {
-                        Log.d(TAG, "Observable: onNext $t")
-                    }
+        val observer = object : Observer<String> {
+            override fun onSubscribe(d: Disposable) {
+                Log.d(TAG, "Observable: onSubscribe")
+            }
 
-                    override fun onError(e: Throwable) {
-                        Log.d(TAG, "Observable: ${e.localizedMessage}")
-                    }
+            override fun onNext(t: String) {
+                Log.d(TAG, "Observable: onNext $t")
+            }
 
-                    override fun onComplete() {
-                        Log.d(TAG, "Observable: onComplete")
-                    }
+            override fun onError(e: Throwable) {
+                Log.d(TAG, "Observable: ${e.localizedMessage}")
+            }
 
-                })*/
-        val observable = Observable.fromCallable { server() }
+            override fun onComplete() {
+                Log.d(TAG, "Observable: onComplete")
+            }
+
+        }
+        observable.subscribe(observer)
+        /*val observable = Observable.fromCallable { server() }
 
         observable
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe(object : Observer<String> {
-            override fun onSubscribe(d: Disposable) {
-                Log.d(TAG, "Observable1: onSubscribe")
-            }
+                override fun onSubscribe(d: Disposable) {
+                    Log.d(TAG, "Observable1: onSubscribe")
+                }
 
-            override fun onNext(t: String) {
-                Log.d(TAG, "Observable1: onNext $t")
-            }
+                override fun onNext(t: String) {
+                    Log.d(TAG, "Observable1: onNext $t")
+                }
 
-            override fun onError(e: Throwable) {
-                Log.d(TAG, "Observable1: ${e.localizedMessage}")
-            }
+                override fun onError(e: Throwable) {
+                    Log.d(TAG, "Observable1: ${e.localizedMessage}")
+                }
 
-            override fun onComplete() {
-                Log.d(TAG, "Observable1: onComplete")
-            }
+                override fun onComplete() {
+                    Log.d(TAG, "Observable1: onComplete")
+                }
 
-        })
+            })
 
         observable.subscribe(object : Observer<String> {
             override fun onSubscribe(d: Disposable) {
@@ -165,7 +243,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         })
-
+*/
 
         /*subscribe(
                     { Log.d(TAG, "Observable: onNext $it") },
@@ -175,50 +253,61 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun server(): String {
+//        throw IOException("Сервер сломался")
         Thread.sleep(3000)
         return "Результат работы сервера ${Calendar.getInstance().timeInMillis}"
     }
 
     fun flowable() {
-        Flowable.range(0, 1000)
+        val flowable = Flowable.range(0, 1000)
             .map(Int::toString)
-            .subscribe(object : FlowableSubscriber<String> {
+        var subscription: Subscription? = null
+        val observer = object : FlowableSubscriber<String> {
 
-                override fun onSubscribe(s: Subscription) {
-                    s.request(1000)
-                    Log.d(TAG, "Flowable: onSubscribe")
-                }
+            override fun onSubscribe(s: Subscription) {
+                Log.d(TAG, "Flowable: onSubscribe")
+                subscription = s
+                subscription?.request(500)
+            }
 
-                override fun onNext(t: String) {
-                    Log.d(TAG, "Flowable: onNext $t")
-                    Thread.sleep(3000)
-                }
+            override fun onNext(t: String) {
+                Log.d(TAG, "Flowable: onNext $t")
+//                Thread.sleep(3)
+            }
 
-                override fun onError(e: Throwable) {
-                    Log.d(TAG, "Flowable: ${e.localizedMessage}")
-                }
+            override fun onError(e: Throwable) {
+                Log.d(TAG, "Flowable: ${e.localizedMessage}")
+            }
 
-                override fun onComplete() {
-                    Log.d(TAG, "Flowable: onComplete")
-                }
+            override fun onComplete() {
+                Log.d(TAG, "Flowable: onComplete")
+            }
 
-            })
+        }
+        flowable.subscribe(observer)
+        do {
+            Thread.sleep(5000)
+            subscription?.request(300)
+        } while (true)
     }
 
     fun flowableBackpressure() {
         val source = PublishProcessor.create<Int>()
 
-        source
+        val subscription = source
+            .onBackpressureBuffer()
             .observeOn(Schedulers.computation())
             .subscribe(ComputeFunction::compute, Throwable::printStackTrace)
-        for (i in 0..1000) source.onNext(i)
+        for (i in 0..100000) {
+            source.onNext(i)
+        }
     }
 
     object ComputeFunction {
         fun compute(v: Int) {
             try {
                 Log.d(TAG, "compute integer v: $v")
-                Thread.sleep(1000)
+                Thread.sleep(v.toLong() * 1000)
             } catch (e: InterruptedException) {
                 e.printStackTrace()
             }
@@ -235,7 +324,7 @@ class MainActivity : AppCompatActivity() {
 
     @Throws(InterruptedException::class)
     fun coldObservable() {
-        val myObservable = Observable.interval(1, TimeUnit.SECONDS)
+        val myObservable = Observable.interval(2, TimeUnit.SECONDS)
 
         myObservable.subscribe { item -> Log.d(TAG, "Observer 1: $item") }
         Thread.sleep(3000)
@@ -246,7 +335,8 @@ class MainActivity : AppCompatActivity() {
     @Throws(InterruptedException::class)
     fun publishTest() {
         val myObservable = Observable.interval(1, TimeUnit.SECONDS)
-        val connectableObservable = myObservable.publish()
+            .take(10)
+        val connectableObservable: ConnectableObservable<Long> = myObservable.publish()
         connectableObservable.connect()
         Thread.sleep(5000)
         connectableObservable.subscribe { item -> Log.d(TAG, "Observer 1: $item") }
@@ -257,18 +347,25 @@ class MainActivity : AppCompatActivity() {
         val myObservable = Observable.interval(1, TimeUnit.SECONDS)
             .take(10)
         val connectableObservable = myObservable.publish()
+        // первый: 0...9
+        // второй: 1...9
+        // второй: 5...9
         connectableObservable.subscribe { item: Long -> Log.d(TAG, "Observer 1: $item") }
+        Thread.sleep(1000)
         connectableObservable.connect()
-        Thread.sleep(3000)
+        Thread.sleep(2000)
         connectableObservable.subscribe { item: Long -> Log.d(TAG, "Observer 2: $item") }
-        Thread.sleep(5000)
+        Thread.sleep(3000)
         connectableObservable.subscribe { item: Long -> Log.d(TAG, "Observer 3: $item") }
     }
 
     @Throws(InterruptedException::class)
     fun refCountTest() {
-        val myObservable = Observable.interval(1, TimeUnit.SECONDS)
-        val hotObservable = myObservable.publish().refCount()
+        val myObservable = Observable.interval(1, TimeUnit.SECONDS).take(10)
+            .flatMap { item -> Observable.just(item)  }
+            .map { item -> item + 1 }
+
+        val hotObservable = myObservable.publish().refCount(2, 5, TimeUnit.SECONDS)
 
         val subscription1 = hotObservable
             .doOnSubscribe { d -> Log.d(TAG, "Observer 1 subscribed") }
@@ -280,20 +377,23 @@ class MainActivity : AppCompatActivity() {
         val subscription2 = hotObservable
             .doOnSubscribe { d -> Log.d(TAG, "Observer 2 subscribed") }
             .doFinally { Log.d(TAG, "Observer 2 unsubscribed") }
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
             .subscribe { item -> Log.d(TAG, "Observer 2: $item") }
 
         Thread.sleep(3000)
         subscription1.dispose()
         subscription2.dispose()
+        Thread.sleep(3000)
         hotObservable
             .doOnSubscribe { d -> Log.d(TAG, "Observer 3 subscribed") }
             .doFinally { Log.d(TAG, "Observer 3 unsubscribed") }
             .subscribe { item -> Log.d(TAG, "Observer 3: $item") }
-        Thread.sleep(3000)
+/*        Thread.sleep(3000)
         hotObservable
             .doOnSubscribe { d -> Log.d(TAG, "Observer 4 subscribed") }
             .doFinally { Log.d(TAG, "Observer 4 unsubscribed") }
-            .subscribe { item -> Log.d(TAG, "Observer 4: $item") }
+            .subscribe { item -> Log.d(TAG, "Observer 4: $item") }*/
     }
 
     fun publishSubject() {
